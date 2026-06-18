@@ -1,0 +1,70 @@
+core_topics:
+  - label_cn: "职业适应力"
+    keywords:
+      - "career adaptability"
+      - "career construction"
+      - "career adapt-abilities"
+
+  - label_cn: "可持续就业能力"
+    keywords:
+      - "sustainable employability"
+      - "employability development"
+      - "graduate employability"
+
+  - label_cn: "高职学生发展"
+    keywords:
+      - "vocational education"
+      - "vocational college students"
+      - "TVET students"
+      - "technical and vocational education"
+      - "student development"
+
+  - label_cn: "数字化学生支持"
+    keywords:
+      - "digital student support"
+      - "student support system"
+      - "learning analytics student support"
+      - "digital advising"
+      - "one-stop student community"
+
+  - label_cn: "职业准备与转衔"
+    keywords:
+      - "school-to-work transition"
+      - "job preparation behavior"
+      - "career self-efficacy"
+      - "professional identity"
+      - "perceived social support"
+
+theory_topics:
+  - label_cn: "教育社会学"
+    keywords:
+      - "sociology of education"
+      - "educational inequality"
+      - "social capital education"
+      - "higher education"
+
+method_topics:
+  - label_cn: "结构方程模型"
+    keywords:
+      - "structural equation modeling"
+      - "SEM"
+      - "mediation model"
+      - "moderated mediation"
+
+  - label_cn: "潜在剖面分析"
+    keywords:
+      - "latent profile analysis"
+      - "LPA"
+      - "person-centered approach"
+
+  - label_cn: "混合研究"
+    keywords:
+      - "mixed methods"
+      - "explanatory sequential design"
+
+negative_topics:
+  - "clinical medicine"
+  - "molecular biology"
+  - "engineering materials"
+  - "unrelated computer science"
+  - "K-12 mathematics teaching"

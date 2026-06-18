@@ -1,0 +1,5 @@
+zotero:
+  library_type_env: ZOTERO_LIBRARY_TYPE
+  user_id_env: ZOTERO_USER_ID
+  api_key_env: ZOTERO_API_KEY
+  collection_key_env: ZOTERO_COLLECTION_KEY

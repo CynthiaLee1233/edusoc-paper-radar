@@ -1,0 +1,53 @@
+name: Daily Paper Radar
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 08:10 Asia/Shanghai = 00:10 UTC. Avoids running at the top of the hour.
+    - cron: "10 0 * * *"
+
+jobs:
+  run-radar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily paper radar
+        run: >
+          python src/main.py
+          --sources openalex crossref
+          --days 7
+          --max-results 100
+          --rank
+          --digest
+          --zotero
+          --notify feishu
+        env:
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          USER_EMAIL: ${{ secrets.USER_EMAIL }}
+          ZOTERO_USER_ID: ${{ secrets.ZOTERO_USER_ID }}
+          ZOTERO_LIBRARY_TYPE: ${{ secrets.ZOTERO_LIBRARY_TYPE }}
+          ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+          ZOTERO_COLLECTION_KEY: ${{ secrets.ZOTERO_COLLECTION_KEY }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+
+      - name: Upload radar outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-radar-outputs
+          if-no-files-found: warn
+          path: |
+            outputs/daily_digest.md
+            outputs/papers_ranked.csv
+            outputs/zotero_import_log.csv
+            outputs/feishu_push_log.csv
