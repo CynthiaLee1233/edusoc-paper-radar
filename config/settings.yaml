@@ -9,7 +9,7 @@ sleep_seconds_between_requests: 1
 search:
 days_back: 365
 max_results_per_source: 20
-query: career adaptability
+query: education sociology higher education vocational education student development career adaptability sustainable employability social support digital student affairs one-stop student community educational inequality school-to-work transition quantitative methods SEM, LPA, longitudinal analysis, mixed methods
 
 ranking:
 min_score_for_zotero: 30
