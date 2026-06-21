@@ -1,4 +1,4 @@
-name: Daily Paper Radar
+name: Daily Paper Radar V6 Test
 
 on:
 workflow_dispatch:
