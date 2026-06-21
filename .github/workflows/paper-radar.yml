@@ -35,6 +35,20 @@ steps:
       python -m pip install --upgrade pip
       python -m pip install -r requirements.txt
 
+      - name: Verify required secrets
+        env:
+          ZOTERO_USER_ID: ${{ secrets.ZOTERO_USER_ID }}
+          ZOTERO_LIBRARY_TYPE: ${{ secrets.ZOTERO_LIBRARY_TYPE }}
+          ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+          ZOTERO_COLLECTION_KEY: ${{ secrets.ZOTERO_COLLECTION_KEY }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          test -n "$ZOTERO_USER_ID" && echo "ZOTERO_USER_ID: set" || (echo "ZOTERO_USER_ID: missing" && exit 1)
+          test -n "$ZOTERO_LIBRARY_TYPE" && echo "ZOTERO_LIBRARY_TYPE: set" || (echo "ZOTERO_LIBRARY_TYPE: missing" && exit 1)
+          test -n "$ZOTERO_API_KEY" && echo "ZOTERO_API_KEY: set" || (echo "ZOTERO_API_KEY: missing" && exit 1)
+          test -n "$ZOTERO_COLLECTION_KEY" && echo "ZOTERO_COLLECTION_KEY: set" || (echo "ZOTERO_COLLECTION_KEY: missing" && exit 1)
+          test -n "$FEISHU_WEBHOOK_URL" && echo "FEISHU_WEBHOOK_URL: set" || echo "FEISHU_WEBHOOK_URL: missing"
+
   - name: Run paper radar
     env:
       OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
