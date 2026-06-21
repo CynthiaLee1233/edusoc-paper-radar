@@ -1,0 +1,59 @@
+name: Daily Paper Radar
+
+on:
+workflow_dispatch:
+
+schedule:
+- cron: "17 8 * * *"
+timezone: "America/Los_Angeles"
+
+permissions:
+contents: read
+
+concurrency:
+group: paper-radar
+cancel-in-progress: false
+
+jobs:
+run-paper-radar:
+runs-on: ubuntu-latest
+timeout-minutes: 20
+
+```
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v6
+
+  - name: Set up Python 3.13
+    uses: actions/setup-python@v5
+    with:
+      python-version: "3.13"
+      cache: pip
+      cache-dependency-path: requirements.txt
+
+  - name: Install dependencies
+    run: |
+      python -m pip install --upgrade pip
+      python -m pip install -r requirements.txt
+
+  - name: Run paper radar
+    env:
+      OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+      USER_EMAIL: ${{ secrets.USER_EMAIL }}
+      ZOTERO_USER_ID: ${{ secrets.ZOTERO_USER_ID }}
+      ZOTERO_LIBRARY_TYPE: ${{ secrets.ZOTERO_LIBRARY_TYPE }}
+      ZOTERO_API_KEY: ${{ secrets.ZOTERO_API_KEY }}
+      ZOTERO_COLLECTION_KEY: ${{ secrets.ZOTERO_COLLECTION_KEY }}
+      FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+      FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+    run: python -u -m src.main --run-once
+
+  - name: Upload radar outputs
+    if: always()
+    uses: actions/upload-artifact@v4
+    with:
+      name: paper-radar-${{ github.run_id }}
+      path: outputs/
+      if-no-files-found: warn
+      retention-days: 14
+```
