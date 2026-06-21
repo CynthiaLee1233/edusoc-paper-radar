@@ -22,9 +22,14 @@ except ImportError:
 
 ZOTERO_API_VERSION = "3"
 RETRY_DELAYS_SECONDS = [2, 5, 10]
+REQUEST_TIMEOUT = (5, 20)
 NETWORK_ERROR_HINT = (
     "\u5982\u679c\u4ecd\u7136\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5 VPN\u3001"
     "\u4ee3\u7406\u3001\u9632\u706b\u5899\u6216\u5f53\u524d\u7f51\u7edc\u8fde\u63a5\u3002"
+)
+PROXY_FALLBACK_MESSAGE = (
+    "\u7b2c\u4e00\u6b21\u8fde\u63a5\u5931\u8d25\uff0c\u53ef\u80fd\u4e0e\u4ee3\u7406\u6216\u7cfb\u7edf\u7f51\u7edc\u73af\u5883\u6709\u5173\u3002"
+    "\u5c06\u5c1d\u8bd5\u5ffd\u7565\u7cfb\u7edf\u4ee3\u7406\u8bbe\u7f6e\u518d\u8fde\u63a5\u4e00\u6b21\u3002"
 )
 AUTH_FAILURE_MESSAGE = (
     "Zotero \u8ba4\u8bc1\u5931\u8d25\uff1aAPI key \u6216 user ID \u53ef\u80fd\u4e0d\u6b63\u786e\u3002"
@@ -137,14 +142,21 @@ class ZoteroClient:
                 "User-Agent": "edusoc-paper-radar/0.1",
             }
         )
+        self._proxy_fallback_used = False
+
+    def _maybe_disable_proxy_fallback(self, attempt: int) -> None:
+        if attempt == 1 and not self._proxy_fallback_used:
+            print(PROXY_FALLBACK_MESSAGE, flush=True)
+            self.session.trust_env = False
+            self._proxy_fallback_used = True
 
     def get_json(self, url: str) -> Any:
-        print("\u6b63\u5728\u8fde\u63a5 Zotero API")
+        print("\u6b63\u5728\u8fde\u63a5 Zotero API", flush=True)
         last_error: Exception | None = None
 
         for attempt in range(1, len(RETRY_DELAYS_SECONDS) + 2):
             try:
-                response = self.session.get(url, timeout=(10, 30))
+                response = self.session.get(url, timeout=REQUEST_TIMEOUT)
                 if _is_temporary_status(response.status_code):
                     last_error = requests.HTTPError(
                         f"Zotero API returned temporary HTTP {response.status_code}",
@@ -162,6 +174,7 @@ class ZoteroClient:
                 requests.exceptions.ChunkedEncodingError,
             ) as error:
                 last_error = error
+                self._maybe_disable_proxy_fallback(attempt)
                 if attempt <= len(RETRY_DELAYS_SECONDS):
                     self._wait_before_retry(attempt)
                     continue
@@ -172,12 +185,12 @@ class ZoteroClient:
         )
 
     def post_json(self, url: str, payload: Any) -> Any:
-        print("\u6b63\u5728\u8fde\u63a5 Zotero API")
+        print("\u6b63\u5728\u8fde\u63a5 Zotero API", flush=True)
         last_error: Exception | None = None
 
         for attempt in range(1, len(RETRY_DELAYS_SECONDS) + 2):
             try:
-                response = self.session.post(url, json=payload, timeout=(10, 30))
+                response = self.session.post(url, json=payload, timeout=REQUEST_TIMEOUT)
                 if _is_temporary_status(response.status_code):
                     last_error = requests.HTTPError(
                         f"Zotero API returned temporary HTTP {response.status_code}",
@@ -195,6 +208,7 @@ class ZoteroClient:
                 requests.exceptions.ChunkedEncodingError,
             ) as error:
                 last_error = error
+                self._maybe_disable_proxy_fallback(attempt)
                 if attempt <= len(RETRY_DELAYS_SECONDS):
                     self._wait_before_retry(attempt)
                     continue
@@ -207,7 +221,7 @@ class ZoteroClient:
     @staticmethod
     def _wait_before_retry(attempt: int) -> None:
         delay = RETRY_DELAYS_SECONDS[attempt - 1]
-        print(f"\u7b2c{attempt}\u6b21\u91cd\u8bd5\uff0c{delay}\u79d2\u540e\u518d\u8bd5...")
+        print(f"\u7b2c{attempt}\u6b21\u91cd\u8bd5\uff0c{delay}\u79d2\u540e\u518d\u8bd5...", flush=True)
         time.sleep(delay)
 
 
@@ -217,6 +231,23 @@ def _client_from_env() -> tuple[ZoteroClient, str, str]:
     user_id = _required_env("ZOTERO_USER_ID")
     library_type = _required_env("ZOTERO_LIBRARY_TYPE")
     return ZoteroClient(api_key), user_id, library_type
+
+
+def _print_zotero_test_diagnostics(user_id: str, library_type: str, collection_key: str, request_url: str) -> None:
+    loaded_names = [
+        name
+        for name in [
+            "ZOTERO_USER_ID",
+            "ZOTERO_LIBRARY_TYPE",
+            "ZOTERO_API_KEY",
+            "ZOTERO_COLLECTION_KEY",
+        ]
+        if os.environ.get(name)
+    ]
+    print(f"已加载环境变量名称：{', '.join(loaded_names) if loaded_names else '未检测到'}", flush=True)
+    print(f"Zotero library type: {library_type}", flush=True)
+    print(f"目标 collection key: {collection_key}", flush=True)
+    print(f"请求 URL（不包含 API key）: {request_url}", flush=True)
 
 
 def fetch_zotero_collections() -> list[ZoteroCollection]:
@@ -247,17 +278,20 @@ def fetch_zotero_collection_for_test() -> tuple[str, ZoteroCollection]:
     client, user_id, library_type = _client_from_env()
     collection_key = _required_env("ZOTERO_COLLECTION_KEY")
     url = build_collection_url(user_id, library_type, collection_key)
+    _print_zotero_test_diagnostics(user_id, library_type, collection_key, url)
+    print("准备调用 Zotero API 测试目标 collection。", flush=True)
     try:
         payload: dict[str, Any] = client.get_json(url)
     except requests.HTTPError as error:
         status_code = error.response.status_code if error.response is not None else None
-        if status_code == 403:
+        if status_code in {401, 403}:
             raise ZoteroAuthenticationError(AUTH_FAILURE_MESSAGE) from error
         if status_code == 404:
             raise ZoteroCollectionNotFoundError(COLLECTION_NOT_FOUND_MESSAGE) from error
         raise RuntimeError(f"Zotero API request failed with HTTP {status_code}") from error
 
     data = payload.get("data", {})
+    print(f"连接成功，collection name: {data.get('name', '')}", flush=True)
     return library_type, ZoteroCollection(
         name=data.get("name", ""),
         key=data.get("key") or payload.get("key", collection_key),
@@ -308,13 +342,13 @@ def read_ranked_papers(path: Path | None = None) -> list[dict[str, str]]:
     path = path or RANKED_PAPERS_PATH
     if not path.exists():
         return []
-    with path.open("r", encoding="utf-8", newline="") as file:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
         return list(csv.DictReader(file))
 
 
 def _score_value(paper: dict[str, str]) -> int:
     try:
-        return int(float(paper.get("relevance_score") or 0))
+        return int(float(paper.get("relevance_score") or paper.get("score") or 0))
     except ValueError:
         return 0
 
@@ -406,7 +440,7 @@ def _append_import_log(rows: list[dict[str, Any]], log_path: Path | None = None)
     log_path = log_path or ZOTERO_IMPORT_LOG_PATH
     log_path.parent.mkdir(parents=True, exist_ok=True)
     exists = log_path.exists()
-    with log_path.open("a", encoding="utf-8", newline="") as file:
+    with log_path.open("a", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=IMPORT_LOG_FIELDS, extrasaction="ignore")
         if not exists:
             writer.writeheader()
@@ -437,7 +471,7 @@ def import_ranked_papers_to_zotero(
         timestamp = datetime.now().isoformat(timespec="seconds")
         title = paper.get("title", "")
         doi = normalize_doi(paper.get("doi"))
-        score = paper.get("relevance_score", "")
+        score = paper.get("relevance_score") or paper.get("score", "")
         try:
             duplicate = find_duplicate(client, user_id, library_type, paper)
         except requests.HTTPError as error:

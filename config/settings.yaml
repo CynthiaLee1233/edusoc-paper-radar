@@ -1,18 +1,29 @@
 project:
-  name: edusoc-paper-radar
+name: edusoc-paper-radar
 
 api:
-  user_agent: edusoc-paper-radar/0.1
-  timeout_seconds: 30
-  sleep_seconds_between_requests: 1
+user_agent: edusoc-paper-radar/0.1
+timeout_seconds: 30
+sleep_seconds_between_requests: 1
 
 search:
-  days_back: 14
-  max_results_per_source: 50
-  query: education sociology higher education vocational career adaptability employability
+days_back: 365
+max_results_per_source: 20
+query: career adaptability
+
+ranking:
+min_score_for_zotero: 30
+top_n_digest: 10
+
+zotero:
+enabled: true
+upload_pdf: false
+
+feishu:
+enabled: false
 
 outputs:
-  papers_raw: outputs/papers_raw.csv
-  papers_deduplicated: outputs/papers_deduplicated.csv
-  papers_ranked: outputs/papers_ranked.csv
-  daily_digest: outputs/daily_digest.md
+papers_raw: outputs/papers_raw.csv
+papers_deduplicated: outputs/papers_deduplicated.csv
+papers_ranked: outputs/papers_ranked.csv
+daily_digest: outputs/daily_digest.md

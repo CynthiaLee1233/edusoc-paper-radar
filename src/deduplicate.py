@@ -14,14 +14,18 @@ except ImportError:
 
 DEDUPLICATED_FIELDS = [
     "title",
+    "year",
     "authors",
     "publication_date",
+    "journal",
     "source_journal",
     "doi",
     "url",
     "abstract",
     "citation_count",
+    "source",
     "source_api",
+    "score",
 ]
 
 
@@ -77,6 +81,11 @@ def choose_richer_record(left: dict[str, Any], right: dict[str, Any]) -> dict[st
         if not str(merged.get(key, "")).strip() and str(value).strip():
             merged[key] = value
     merged["doi"] = normalize_doi(str(merged.get("doi", ""))) or str(merged.get("doi", ""))
+    merged["journal"] = merged.get("journal") or merged.get("source_journal", "")
+    merged["source_journal"] = merged.get("source_journal") or merged.get("journal", "")
+    merged["source"] = merged.get("source") or merged.get("source_api", "")
+    merged["source_api"] = merged.get("source_api") or merged.get("source", "")
+    merged["year"] = str(merged.get("year") or str(merged.get("publication_date", ""))[:4])
     return merged
 
 
@@ -94,6 +103,11 @@ def deduplicate_papers(papers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for paper in papers:
         normalized = dict(paper)
         normalized["doi"] = normalize_doi(str(normalized.get("doi", ""))) or normalized.get("doi", "")
+        normalized["journal"] = normalized.get("journal") or normalized.get("source_journal", "")
+        normalized["source_journal"] = normalized.get("source_journal") or normalized.get("journal", "")
+        normalized["source"] = normalized.get("source") or normalized.get("source_api", "")
+        normalized["source_api"] = normalized.get("source_api") or normalized.get("source", "")
+        normalized["year"] = str(normalized.get("year") or str(normalized.get("publication_date", ""))[:4])
         key = _dedupe_key(normalized)
         if key in by_key:
             by_key[key] = choose_richer_record(by_key[key], normalized)

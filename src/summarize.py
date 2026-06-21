@@ -21,13 +21,13 @@ def read_ranked_papers(path: Path | None = None) -> list[dict[str, str]]:
     path = path or INPUT_PATH
     if not path.exists():
         return []
-    with path.open("r", encoding="utf-8", newline="") as file:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
         return list(csv.DictReader(file))
 
 
 def _score(paper: dict[str, Any]) -> int:
     try:
-        return int(float(paper.get("relevance_score") or 0))
+        return int(float(paper.get("relevance_score") or paper.get("score") or 0))
     except ValueError:
         return 0
 
@@ -85,15 +85,18 @@ def _research_use(paper: dict[str, str]) -> str:
 
 
 def _paper_block(index: int, paper: dict[str, str]) -> list[str]:
+    year_or_date = paper.get("publication_date") or paper.get("year") or ""
+    journal_or_source = paper.get("source_journal") or paper.get("journal") or paper.get("source") or ""
+    score = paper.get("relevance_score") or paper.get("score") or "0"
     return [
         f"### {index}. {_chinese_title(paper)}",
         "",
         f"- Original title: {_missing(paper.get('title'), '\u6807\u9898\u6682\u7f3a')}",
         f"- Authors: {_missing(paper.get('authors'), '\u4f5c\u8005\u6682\u7f3a')}",
-        f"- Year / publication date: {_year_or_date(paper.get('publication_date', ''))}",
-        f"- Journal / source: {_missing(paper.get('source_journal'), '\u671f\u520a/\u6765\u6e90\u6682\u7f3a')}",
+        f"- Year / publication date: {_year_or_date(year_or_date)}",
+        f"- Journal / source: {_missing(journal_or_source, '\u671f\u520a/\u6765\u6e90\u6682\u7f3a')}",
         f"- DOI / URL: {_doi_url_line(paper)}",
-        f"- Relevance score: {_missing(paper.get('relevance_score'), '0')}",
+        f"- Relevance score: {_missing(score, '0')}",
         f"- Matched keywords: {_missing(paper.get('matched_keywords'), '\u6682\u65e0')}",
         f"- Relevance reason: {_missing(paper.get('relevance_reason_cn'), '\u76f8\u5173\u6027\uff1a\u5efa\u8bae\u4eba\u5de5\u590d\u6838\u3002')}",
         f"- {_abstract_line(paper)}",
@@ -112,7 +115,7 @@ def trend_keywords(papers: list[dict[str, str]], limit: int = 10) -> list[str]:
     return [keyword for keyword, _ in counter.most_common(limit)]
 
 
-def build_daily_digest(papers: list[dict[str, str]], top_n: int = 5) -> str:
+def build_daily_digest(papers: list[dict[str, str]], top_n: int = 5, empty_reason: str = "") -> str:
     ranked = _sorted_papers(papers)
     top = ranked[:top_n]
     trends = trend_keywords(ranked)
@@ -130,7 +133,8 @@ def build_daily_digest(papers: list[dict[str, str]], top_n: int = 5) -> str:
     ]
 
     if not top:
-        lines.extend(["\u4eca\u65e5\u6682\u65e0\u53ef\u7528\u8bba\u6587\u8bb0\u5f55\u3002", ""])
+        reason = empty_reason or "OpenAlex/Crossref 未返回可用论文，或检索结果在去重后为空。"
+        lines.extend([f"本次未检索到可用论文。原因：{reason}", ""])
     else:
         for index, paper in enumerate(top, start=1):
             lines.extend(_paper_block(index, paper))
@@ -161,9 +165,13 @@ def build_daily_digest(papers: list[dict[str, str]], top_n: int = 5) -> str:
 def write_daily_digest(
     input_path: Path | None = None,
     output_path: Path | None = None,
+    empty_reason: str = "",
 ) -> Path:
     input_path = input_path or INPUT_PATH
     output_path = output_path or OUTPUT_PATH
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(build_daily_digest(read_ranked_papers(input_path)), encoding="utf-8")
+    output_path.write_text(
+        build_daily_digest(read_ranked_papers(input_path), empty_reason=empty_reason),
+        encoding="utf-8-sig",
+    )
     return output_path

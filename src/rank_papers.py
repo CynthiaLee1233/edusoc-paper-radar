@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from .utils import PROJECT_ROOT, write_csv
+    from .utils import PROJECT_ROOT, load_settings, write_csv
 except ImportError:
-    from utils import PROJECT_ROOT, write_csv
+    from utils import PROJECT_ROOT, load_settings, write_csv
 
 
 TOPIC_KEYWORDS = {
@@ -85,23 +85,36 @@ K12_ALLOWED_CONTEXT = [
 
 RANKED_FIELDS = [
     "title",
+    "year",
+    "doi",
+    "source",
+    "journal",
+    "url",
+    "abstract",
+    "score",
     "authors",
     "publication_date",
     "source_journal",
-    "doi",
-    "url",
-    "abstract",
     "citation_count",
     "source_api",
     "relevance_score",
-    "topic_score",
-    "method_score",
-    "journal_score",
-    "recency_score",
-    "influence_score",
     "matched_keywords",
     "relevance_reason_cn",
 ]
+
+SIMPLE_JOURNAL_PRIORITIES = {
+    "educational research review": 10,
+    "review of educational research": 10,
+    "educational researcher": 9,
+    "higher education": 9,
+    "studies in higher education": 9,
+    "research in higher education": 9,
+    "journal of vocational behavior": 9,
+    "sociology of education": 10,
+    "british journal of sociology of education": 9,
+    "asia pacific education review": 6,
+    "chinese education & society": 6,
+}
 
 
 def _text_for_matching(paper: dict[str, Any]) -> str:
@@ -109,6 +122,17 @@ def _text_for_matching(paper: dict[str, Any]) -> str:
         str(paper.get(key, ""))
         for key in ["title", "abstract", "source_journal", "venue", "journal"]
     ).lower()
+
+
+def _split_query_terms(query: str) -> list[str]:
+    phrases = [part.strip().lower() for part in re.split(r"[;,\n]+", query) if part.strip()]
+    if len(phrases) == 1:
+        phrases.extend(
+            term.strip().lower()
+            for term in re.split(r"\s+(?:and|or)\s+|\s*\|\s*", query)
+            if term.strip() and term.strip().lower() not in phrases
+        )
+    return list(dict.fromkeys(phrases))
 
 
 def _keyword_matches(text: str, keyword: str) -> bool:
@@ -124,8 +148,12 @@ def _score_keywords(text: str, weights: dict[str, int]) -> tuple[int, list[str]]
 
 
 def _journal_score(paper: dict[str, Any]) -> int:
-    journal = str(paper.get("source_journal") or paper.get("venue") or "").lower()
-    return max((weight for name, weight in HIGH_PRIORITY_JOURNALS.items() if name in journal), default=0)
+    journal = str(paper.get("journal") or paper.get("source_journal") or paper.get("venue") or "").lower()
+    return max(
+        [weight for name, weight in HIGH_PRIORITY_JOURNALS.items() if name in journal]
+        + [weight for name, weight in SIMPLE_JOURNAL_PRIORITIES.items() if name in journal],
+        default=0,
+    )
 
 
 def _recency_score(publication_date: str) -> int:
@@ -155,6 +183,44 @@ def _influence_score(citation_count: str | int | None) -> int:
     return min(5, int(math.log10(count + 1) * 2))
 
 
+def _year_score(paper: dict[str, Any]) -> int:
+    year_text = str(paper.get("year") or str(paper.get("publication_date", ""))[:4])
+    try:
+        year = int(year_text)
+    except ValueError:
+        return 0
+    current_year = date.today().year
+    if year >= current_year:
+        return 8
+    if year == current_year - 1:
+        return 6
+    if year >= current_year - 3:
+        return 4
+    if year >= current_year - 5:
+        return 2
+    return 0
+
+
+def _query_score(paper: dict[str, Any], query_terms: list[str]) -> tuple[int, list[str]]:
+    title = str(paper.get("title", "")).lower()
+    abstract = str(paper.get("abstract", "")).lower()
+    matched: list[str] = []
+    score = 0
+    for term in query_terms:
+        if not term:
+            continue
+        term_matched = False
+        if _keyword_matches(title, term):
+            score += 18
+            term_matched = True
+        if abstract and _keyword_matches(abstract, term):
+            score += 8
+            term_matched = True
+        if term_matched:
+            matched.append(term)
+    return min(score, 50), matched
+
+
 def _penalty_score(text: str) -> tuple[int, list[str]]:
     penalty, matched = _score_keywords(text, PENALTY_KEYWORDS)
     if ("k-12" in text or "mathematics teaching" in text) and any(term in text for term in K12_ALLOWED_CONTEXT):
@@ -174,43 +240,80 @@ def _reason_cn(matched: list[str], penalty_matches: list[str]) -> str:
     return reason
 
 
-def rank_paper(paper: dict[str, Any]) -> dict[str, Any]:
-    text = _text_for_matching(paper)
-    topic_score, topic_matches = _score_keywords(text, TOPIC_KEYWORDS)
-    method_score, method_matches = _score_keywords(text, METHOD_KEYWORDS)
-    journal_score = _journal_score(paper)
-    recency_score = _recency_score(str(paper.get("publication_date", "")))
-    influence_score = _influence_score(paper.get("citation_count"))
-    penalty_score, penalty_matches = _penalty_score(text)
-    matched = topic_matches + method_matches
-    raw_relevance_score = topic_score + method_score + journal_score + recency_score + influence_score - penalty_score
-    relevance_score = max(0, min(100, raw_relevance_score))
+def _simple_score(title: str, year: str | int | None, abstract: str = "", query: str = "") -> tuple[int, list[str]]:
+    title_lower = (title or "").lower()
+    abstract_lower = (abstract or "").lower()
+    query_lower = (query or "").lower().strip()
+    matched: list[str] = []
+    score = 10
+    if query_lower and query_lower in title_lower:
+        score += 35
+        matched.append(query_lower)
+    elif query_lower and query_lower in abstract_lower:
+        score += 15
+        matched.append(query_lower)
+    if "career adaptability" in title_lower:
+        score += 30
+        matched.append("career adaptability")
+    if "employability" in title_lower:
+        score += 25
+        matched.append("employability")
+    if "vocational" in title_lower:
+        score += 20
+        matched.append("vocational")
+    if "higher education" in title_lower:
+        score += 15
+        matched.append("higher education")
+    try:
+        if int(str(year or "")[:4]) >= 2020:
+            score += 10
+    except ValueError:
+        pass
+    return min(score, 100), list(dict.fromkeys(matched))
 
-    ranked = dict(paper)
-    ranked.update(
-        {
-            "relevance_score": str(relevance_score),
-            "topic_score": str(topic_score),
-            "method_score": str(method_score),
-            "journal_score": str(journal_score),
-            "recency_score": str(recency_score),
-            "influence_score": str(influence_score),
-            "matched_keywords": "; ".join(matched),
-            "relevance_reason_cn": _reason_cn(matched, penalty_matches),
-        }
+
+def rank_paper(paper: dict[str, Any], query_terms: list[str] | None = None) -> dict[str, Any]:
+    query = str(load_settings().get("query", ""))
+    year = str(paper.get("year") or str(paper.get("publication_date", ""))[:4])
+    journal = str(paper.get("journal") or paper.get("source_journal", ""))
+    source = str(paper.get("source") or paper.get("source_api", ""))
+    title = str(paper.get("title", ""))
+    abstract = str(paper.get("abstract", ""))
+    score, matched = _simple_score(title, year, abstract=abstract, query=query)
+    reason = (
+        "相关性：命中核心主题“" + "、".join(matched[:6]) + "”。"
+        if matched
+        else "相关性：基础候选论文，建议人工复核。"
     )
-    return ranked
+    return {
+        "title": title,
+        "year": year,
+        "doi": str(paper.get("doi", "")),
+        "source": source,
+        "journal": journal,
+        "url": str(paper.get("url", "")),
+        "abstract": abstract,
+        "score": str(score),
+        "authors": str(paper.get("authors", "")),
+        "publication_date": str(paper.get("publication_date") or year),
+        "source_journal": journal,
+        "citation_count": str(paper.get("citation_count", "")),
+        "source_api": str(paper.get("source_api") or source),
+        "relevance_score": str(score),
+        "matched_keywords": "; ".join(matched),
+        "relevance_reason_cn": reason,
+    }
 
 
 def rank_papers(papers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ranked = [rank_paper(paper) for paper in papers]
-    return sorted(ranked, key=lambda paper: int(paper.get("relevance_score", "0")), reverse=True)
+    return sorted(ranked, key=lambda paper: int(paper.get("score") or 0), reverse=True)
 
 
 def read_papers_csv(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
-    with path.open("r", encoding="utf-8", newline="") as file:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
         return list(csv.DictReader(file))
 
 

@@ -37,14 +37,14 @@ def read_digest(path: Path | None = None) -> str:
     path = path or DIGEST_PATH
     if not path.exists():
         return ""
-    return path.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8-sig")
 
 
 def read_zotero_status(path: Path | None = None) -> str:
     path = path or ZOTERO_LOG_PATH
     if not path.exists():
         return "Zotero import status: \u6682\u65e0\u5bfc\u5165\u65e5\u5fd7\u3002"
-    with path.open("r", encoding="utf-8", newline="") as file:
+    with path.open("r", encoding="utf-8-sig", newline="") as file:
         rows = list(csv.DictReader(file))
     if not rows:
         return "Zotero import status: \u6682\u65e0\u5bfc\u5165\u8bb0\u5f55\u3002"
@@ -105,7 +105,7 @@ def _append_log(rows: list[dict[str, str]], log_path: Path | None = None) -> Non
     log_path = log_path or FEISHU_LOG_PATH
     log_path.parent.mkdir(parents=True, exist_ok=True)
     exists = log_path.exists()
-    with log_path.open("a", encoding="utf-8", newline="") as file:
+    with log_path.open("a", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=LOG_FIELDS, extrasaction="ignore")
         if not exists:
             writer.writeheader()

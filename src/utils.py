@@ -12,9 +12,6 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
-import requests
-
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -65,13 +62,47 @@ def load_settings() -> dict[str, Any]:
         match = re.search(rf"^\s*{re.escape(name)}:\s*(.+?)\s*$", text, re.MULTILINE)
         return match.group(1).strip().strip("'\"") if match else default
 
+    def find_section_str(section: str, name: str, default: str) -> str:
+        section_match = re.search(
+            rf"^{re.escape(section)}:\s*$([\s\S]*?)(?=^[A-Za-z_][\w-]*:\s*$|\Z)",
+            text,
+            re.MULTILINE,
+        )
+        if not section_match:
+            return default
+        section_text = section_match.group(1)
+        match = re.search(rf"^\s*{re.escape(name)}:\s*(.+?)\s*$", section_text, re.MULTILINE)
+        return match.group(1).strip().strip("'\"") if match else default
+
+    def find_section_int(section: str, name: str, default: int) -> int:
+        value = find_section_str(section, name, "")
+        return int(value) if value.isdigit() else default
+
     return {
-        "days_back": find_int("days_back", 14),
-        "max_results_per_source": find_int("max_results_per_source", 50),
-        "sleep_seconds_between_requests": find_int("sleep_seconds_between_requests", 1),
-        "timeout_seconds": find_int("timeout_seconds", 30),
-        "user_agent": find_str("user_agent", "edusoc-paper-radar/0.1"),
+        "days_back": find_section_int("search", "days_back", find_int("days_back", 14)),
+        "max_results_per_source": find_section_int(
+            "search", "max_results_per_source", find_int("max_results_per_source", 50)
+        ),
+        "sleep_seconds_between_requests": find_section_int(
+            "api", "sleep_seconds_between_requests", find_int("sleep_seconds_between_requests", 1)
+        ),
+        "timeout_seconds": find_section_int("api", "timeout_seconds", find_int("timeout_seconds", 30)),
+        "user_agent": find_section_str("api", "user_agent", find_str("user_agent", "edusoc-paper-radar/0.1")),
+        "query": find_section_str(
+            "search", "query", find_str("query", "sociology of education higher education vocational education")
+        ),
+        "papers_raw": find_section_str("outputs", "papers_raw", "outputs/papers_raw.csv"),
+        "papers_deduplicated": find_section_str(
+            "outputs", "papers_deduplicated", "outputs/papers_deduplicated.csv"
+        ),
+        "papers_ranked": find_section_str("outputs", "papers_ranked", "outputs/papers_ranked.csv"),
+        "daily_digest": find_section_str("outputs", "daily_digest", "outputs/daily_digest.md"),
     }
+
+
+def project_path(path_value: str | Path) -> Path:
+    path = Path(path_value)
+    return path if path.is_absolute() else PROJECT_ROOT / path
 
 
 def load_topic_keywords() -> list[str]:
@@ -129,11 +160,19 @@ def cache_get_or_request(
 
 def write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as file:
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def get_session() -> requests.Session:
+def ensure_output_dir() -> Path:
+    output_dir = PROJECT_ROOT / "outputs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def get_session():
+    import requests
+
     return requests.Session()
