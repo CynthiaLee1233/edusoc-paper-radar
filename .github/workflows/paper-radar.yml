@@ -50,7 +50,7 @@ steps:
 
   - name: Upload radar outputs
     if: always()
-    uses: actions/upload-artifact@v4
+    uses: actions/upload-artifact@v6
     with:
       name: paper-radar-${{ github.run_id }}
       path: outputs/
