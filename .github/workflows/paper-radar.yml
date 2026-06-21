@@ -15,7 +15,7 @@ group: paper-radar
 cancel-in-progress: false
 
 jobs:
-run-paper-radar:
+run-radar:
 runs-on: ubuntu-latest
 timeout-minutes: 20
 
